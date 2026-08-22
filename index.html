@@ -423,6 +423,85 @@ button{
   font-size:2rem;
 }
 
+
+/* RADAR MIGLIORATO */
+
+.radar-card{
+  overflow:hidden;
+}
+
+.radar-toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:10px;
+}
+
+.radar-toolbar button{
+  flex:1 1 120px;
+}
+
+.radar-map{
+  height:500px;
+  border-radius:18px;
+}
+
+.radar-time-box{
+  margin-top:12px;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:#f7fbff;
+}
+
+.radar-time-main{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.radar-clock{
+  font-size:1.15rem;
+  font-weight:900;
+}
+
+.radar-counter{
+  color:var(--muted);
+  font-size:12px;
+}
+
+.radar-range{
+  width:100%;
+  margin-top:12px;
+  accent-color:var(--p);
+}
+
+.radar-legend{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:6px;
+  margin-top:12px;
+}
+
+.radar-legend-item{
+  text-align:center;
+  font-size:11px;
+  color:var(--muted);
+}
+
+.radar-color{
+  height:9px;
+  border-radius:999px;
+  margin-bottom:4px;
+}
+
+.radar-c1{background:#5bc0ff}
+.radar-c2{background:#32cd6b}
+.radar-c3{background:#ffd54f}
+.radar-c4{background:#ef5350}
+
 @media(max-width:700px){
 
   .tabs{
@@ -454,6 +533,14 @@ button{
 
   .local-clock{
     font-size:1.7rem;
+  }
+
+  .radar-map{
+    height:430px;
+  }
+
+  .radar-legend{
+    grid-template-columns:1fr 1fr;
   }
 }
 </style>
@@ -781,22 +868,92 @@ Aggiorna
 
 <section id="radar" class="panel">
 
-<div class="card">
+<div class="card radar-card">
 
 <h2>📡 Radar pioggia live</h2>
 
+<p class="note">
+Animazione delle precipitazioni recenti. Puoi scorrere manualmente i fotogrammi oppure avviare l'animazione.
+</p>
+
+<div class="radar-toolbar">
+
 <button class="secondary" id="radarBtn">
-Aggiorna
+🔄 Aggiorna radar
+</button>
+
+<button class="secondary" id="radarCenter">
+📍 Centra posizione
+</button>
+
+<button class="secondary" id="radarPrev">
+⏮️ Indietro
 </button>
 
 <button class="secondary" id="radarPlay">
-▶︎ Play
+▶️ Play
 </button>
 
-<div id="radarLiveMap" class="map"></div>
+<button class="secondary" id="radarNext">
+⏭️ Avanti
+</button>
 
-<div id="radarClock" class="note">
+</div>
+
+<div id="radarLiveMap" class="map radar-map"></div>
+
+<div class="radar-time-box">
+
+<div class="radar-time-main">
+
+<div>
+<div class="note">Ora del fotogramma</div>
+<div id="radarClock" class="radar-clock">
 Radar non caricato
+</div>
+</div>
+
+<div id="radarFrameCounter" class="radar-counter">
+0 / 0
+</div>
+
+</div>
+
+<input
+  id="radarSlider"
+  class="radar-range"
+  type="range"
+  min="0"
+  max="0"
+  value="0"
+  step="1"
+  aria-label="Linea temporale radar"
+>
+
+<div class="radar-legend">
+
+<div class="radar-legend-item">
+<div class="radar-color radar-c1"></div>
+Pioggia debole
+</div>
+
+<div class="radar-legend-item">
+<div class="radar-color radar-c2"></div>
+Moderata
+</div>
+
+<div class="radar-legend-item">
+<div class="radar-color radar-c3"></div>
+Forte
+</div>
+
+<div class="radar-legend-item">
+<div class="radar-color radar-c4"></div>
+Molto forte
+</div>
+
+</div>
+
 </div>
 
 </div>
@@ -2619,6 +2776,8 @@ let radarIndex=0;
 
 let radarTimer=null;
 
+let radarMarkerLive=null;
+
 function ensureRadarMap(){
 
 if(radarLiveMap)return;
@@ -2658,6 +2817,54 @@ attribution:
 radarLiveMap
 );
 
+centerRadarOnLocation(false);
+
+}
+
+function centerRadarOnLocation(animated=true){
+
+if(!radarLiveMap){
+  ensureRadarMap();
+}
+
+if(!pos){
+  radarLiveMap.setView([41.9,12.5],6);
+  return;
+}
+
+const target=[Number(pos.lat),Number(pos.lon)];
+
+if(animated){
+
+  radarLiveMap.flyTo(
+    target,
+    8,
+    {duration:.8}
+  );
+
+}else{
+
+  radarLiveMap.setView(
+    target,
+    8
+  );
+
+}
+
+if(radarMarkerLive){
+
+  radarMarkerLive.remove();
+
+}
+
+radarMarkerLive=
+
+L.marker(target)
+.addTo(radarLiveMap)
+.bindPopup(
+  pos.name || "Posizione selezionata"
+);
+
 }
 
 async function loadRadar(){
@@ -2666,20 +2873,13 @@ try{
 
 ensureRadarMap();
 
-if(pos){
-
-radarLiveMap.setView(
-
-[pos.lat,pos.lon],
-
-8
-
-);
-
-}
+centerRadarOnLocation(false);
 
 $("radarClock").textContent=
 "Caricamento radar…";
+
+$("radarFrameCounter").textContent=
+"0 / 0";
 
 const response=
 await fetch(
@@ -2725,6 +2925,16 @@ throw Error(
 radarIndex=
 radarFrames.length-1;
 
+$("radarSlider").min="0";
+
+$("radarSlider").max=
+String(
+  radarFrames.length-1
+);
+
+$("radarSlider").value=
+String(radarIndex);
+
 showRadarFrame(
 radarIndex
 );
@@ -2737,6 +2947,9 @@ e.message
 ||
 "Radar non disponibile";
 
+$("radarFrameCounter").textContent=
+"0 / 0";
+
 }
 
 }
@@ -2745,8 +2958,17 @@ function showRadarFrame(index){
 
 if(!radarFrames.length)return;
 
+radarIndex=
+Math.max(
+  0,
+  Math.min(
+    Number(index),
+    radarFrames.length-1
+  )
+);
+
 const frame=
-radarFrames[index];
+radarFrames[radarIndex];
 
 if(radarLayerLive){
 
@@ -2762,7 +2984,7 @@ L.tileLayer(
 
 {
 
-opacity:.72,
+opacity:.78,
 
 maxNativeZoom:7,
 
@@ -2778,19 +3000,111 @@ attribution:
 radarLiveMap
 );
 
+$("radarSlider").value=
+String(radarIndex);
+
+$("radarFrameCounter").textContent=
+`${radarIndex+1} / ${radarFrames.length}`;
+
 $("radarClock").textContent=
 
 new Date(
 frame.time*1000
 )
 .toLocaleString(
-"it-IT"
+"it-IT",
+{
+  weekday:"short",
+  day:"2-digit",
+  month:"2-digit",
+  hour:"2-digit",
+  minute:"2-digit"
+}
 );
+
+}
+
+function stopRadarAnimation(){
+
+if(!radarTimer)return;
+
+clearInterval(
+  radarTimer
+);
+
+radarTimer=null;
+
+$("radarPlay").textContent=
+"▶️ Play";
 
 }
 
 $("radarBtn").onclick=
 loadRadar;
+
+$("radarCenter").onclick=
+()=>{
+
+ensureRadarMap();
+
+centerRadarOnLocation(true);
+
+};
+
+$("radarPrev").onclick=
+()=>{
+
+if(!radarFrames.length){
+  loadRadar();
+  return;
+}
+
+stopRadarAnimation();
+
+showRadarFrame(
+  radarIndex-1 < 0
+  ?
+  0
+  :
+  radarIndex-1
+);
+
+};
+
+$("radarNext").onclick=
+()=>{
+
+if(!radarFrames.length){
+  loadRadar();
+  return;
+}
+
+stopRadarAnimation();
+
+showRadarFrame(
+  radarIndex+1 >= radarFrames.length
+  ?
+  radarFrames.length-1
+  :
+  radarIndex+1
+);
+
+};
+
+$("radarSlider").addEventListener(
+"input",
+event=>{
+
+if(!radarFrames.length)return;
+
+stopRadarAnimation();
+
+showRadarFrame(
+  Number(event.target.value)
+);
+
+}
+);
 
 $("radarPlay").onclick=
 ()=>{
@@ -2807,34 +3121,20 @@ return;
 
 if(radarTimer){
 
-clearInterval(
-radarTimer
-);
-
-radarTimer=null;
-
-$("radarPlay").textContent=
-"▶︎ Play";
+stopRadarAnimation();
 
 return;
 
 }
 
 $("radarPlay").textContent=
-"⏸ Pausa";
-
-radarIndex=0;
-
-showRadarFrame(
-radarIndex
-);
+"⏸️ Pausa";
 
 radarTimer=
 
 setInterval(()=>{
 
 radarIndex=
-
 (radarIndex+1)
 %
 radarFrames.length;
@@ -2843,7 +3143,7 @@ showRadarFrame(
 radarIndex
 );
 
-},700);
+},800);
 
 };
 
